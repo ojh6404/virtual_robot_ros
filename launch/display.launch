@@ -1,0 +1,26 @@
+<launch>
+  <arg name="model" default="$(env HOME)/.ros/pr2.urdf.ros"/>
+  <arg name="real_frame" default="base_footprint" />
+  <arg name="virtual_frame" default="virtual/base_footprint" />
+  <arg name="gui" default="true" />
+  <arg name="rvizconfig" default="$(find virtual_robot_ros)/rviz/urdf.rviz" />
+
+  <param name="virtual_robot_description" command="$(find xacro)/xacro $(arg model)" />
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="virtual_robot_state_publisher" >
+    <remap from="robot_description" to="virtual_robot_description" />
+    <remap from="joint_states" to="virtual_robot_joint_states" />
+  </node>
+  <node name="virtual_robot_joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" respawn="false" output="screen" unless="$(arg gui)">
+    <remap from="robot_description" to="/virtual_robot_description" />
+    <remap from="joint_states" to="virtual_robot_joint_states" />
+  </node>
+  <node name="virtual_robot_joint_state_publisher" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" respawn="false" output="screen" if="$(arg gui)">
+    <remap from="robot_description" to="/virtual_robot_description" />
+    <remap from="joint_states" to="virtual_robot_joint_states" />
+  </node>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="virtual_tf_publisher" args="0 0 0 0 0 0 1 $(arg real_frame) $(arg virtual_frame)" />
+
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" />
+
+</launch>

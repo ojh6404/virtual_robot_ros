@@ -1,0 +1,5 @@
+- git:
+    # we need latest version cause it fixes rviz config load for different robot description
+    local-name: ros-visualization/rviz.git
+    uri: https://github.com/ros-visualization/rviz.git
+    version: noetic-devel
