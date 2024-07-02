@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import time
 import numpy as np
 import cv2
 from collections import OrderedDict
@@ -15,9 +14,9 @@ from cv_bridge import CvBridge
 
 import urdfpy
 import pyrender
-from pyrender import OffscreenRenderer
 
-from utils import create_raymond_lights, get_processed_urdf_path
+
+from virtual_robot_ros.utils import create_raymond_lights, get_processed_urdf_path
 
 
 if os.environ.get("PYOPENGL_PLATFORM") is None:
@@ -39,7 +38,9 @@ class RobotRenderNode(object):
             self.viewport_height, self.viewport_width = self.cv_bridge.imgmsg_to_cv2(img_msg, "bgr8").shape[:2]
         except rospy.ROSException:
             rospy.logerr("Failed to get image size from {}".format("~input_image"))
-        self.renderer = OffscreenRenderer(viewport_width=self.viewport_width, viewport_height=self.viewport_height)
+        self.renderer = pyrender.OffscreenRenderer(
+            viewport_width=self.viewport_width, viewport_height=self.viewport_height
+        )
         self.scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3))
 
         # Set lights
@@ -110,9 +111,7 @@ class RobotRenderNode(object):
                 self.node_map[mesh].matrix = pose
 
             # render robot on image
-            start = time.time()
             rgba, depth = self.renderer.render(self.scene, flags=pyrender.RenderFlags.RGBA)
-            rospy.loginfo("Rendering time: {:.3f} sec".format(time.time() - start))
             rgb = cv2.cvtColor(rgba[:, :, :3].copy(), cv2.COLOR_RGB2BGR)
             alpha = rgba[:, :, 3].copy().astype(np.float32) / 255.0
             render_image = rgb * alpha[..., None] + self.image * (1 - alpha[..., None])

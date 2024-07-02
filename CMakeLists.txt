@@ -9,6 +9,7 @@ find_package(catkin
   catkin_virtualenv
 )
 
+catkin_python_setup()
 
 catkin_package(
   CATKIN_DEPENDS
