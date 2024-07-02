@@ -17,6 +17,11 @@ from pyrender import OffscreenRenderer
 
 from utils import create_raymond_lights, get_processed_urdf_path
 
+import time
+import os
+if os.environ.get("PYOPENGL_PLATFORM") is None:
+    os.environ["PYOPENGL_PLATFORM"] = "egl"
+
 
 class RobotRenderNode(object):
     def __init__(self):
@@ -37,8 +42,8 @@ class RobotRenderNode(object):
         self.scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3))
 
         # Set lights
-        for light_node in create_raymond_lights():
-            self.scene.add_node(light_node)
+        # for light_node in create_raymond_lights():
+        #     self.scene.add_node(light_node)
 
         # set robot
         self.robot_urdf = get_processed_urdf_path(rospy.get_param("~robot_urdf"))
@@ -70,57 +75,64 @@ class RobotRenderNode(object):
         self.tf_listener = tf.TransformListener()
         self.sub_joint = rospy.Subscriber("~joint_states", JointState, self.joint_callback)
         self.sub_img = rospy.Subscriber("~input_image", Image, self.img_callback, queue_size=1, buff_size=2**24)
-        self.timer = rospy.Timer(rospy.Duration(1.0 / self.fps), self.timer_callback)
+
+        while not rospy.is_shutdown():
+            try:
+                # get camera pose and apply to camera node
+                camera_trans, camera_quat = self.tf_listener.lookupTransform(
+                    self.base_frame, self.image_frame, rospy.Time(0)
+                )
+                camera_rot = tf.transformations.quaternion_matrix(camera_quat)[:3, :3]
+                camera_frame = np.identity(4)
+                camera_frame[:3, 3] = camera_trans
+                camera_frame[:3, :3] = camera_rot
+                coordinate_transform = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+                camera_frame = camera_frame @ coordinate_transform
+                self.camera_node.matrix = camera_frame
+            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                rospy.logwarn("Failed to get transform from {} to {}".format(self.base_frame, self.image_frame))
+                continue
+
+
+            # get joint states for update rendered robot joints
+            try:
+                filtered_joint_names = [name for name in self.joint_names if name in self.joint_states]
+                joint_angles = {joint_name: self.joint_states[joint_name] for joint_name in filtered_joint_names}
+            except AttributeError:
+                rospy.logwarn("Failed to get joint states")
+                continue
+
+            # apply forward kinematics to mesh
+            self.fk = self.robot.visual_trimesh_fk(cfg=joint_angles)
+            for mesh in self.fk:
+                pose = self.fk[mesh]
+                self.node_map[mesh].matrix = pose
+
+            # render robot on image
+            start = time.time()
+            rgba, depth = self.renderer.render(self.scene, flags=pyrender.RenderFlags.RGBA)
+            rospy.loginfo("Rendering time: {:.3f} sec".format(time.time() - start))
+            rgb = cv2.cvtColor(rgba[:, :, :3].copy(), cv2.COLOR_RGB2BGR)
+            alpha = rgba[:, :, 3].copy().astype(np.float32) / 255.0
+            render_image = rgb * alpha[..., None] + self.image * (1 - alpha[..., None])
+            render_image = render_image.astype(np.uint8)
+
+            # publish
+            render_img_msg = self.cv_bridge.cv2_to_imgmsg(render_image, "bgr8")
+            render_img_msg.header.stamp = rospy.Time.now()
+            render_img_msg.header.frame_id = self.image_frame
+            self.pub_img.publish(render_img_msg)
+
+            render_mask_msg = self.cv_bridge.cv2_to_imgmsg((alpha * 255).astype(np.uint8), "mono8")
+            render_mask_msg.header.stamp = rospy.Time.now()
+            render_mask_msg.header.frame_id = self.image_frame
+            self.pub_mask.publish(render_mask_msg)
 
     def joint_callback(self, msg):
         self.joint_states = {name: angle for name, angle in zip(msg.name, msg.position)}
 
     def img_callback(self, msg):
         self.image = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
-
-    def timer_callback(self, event):
-        try:
-            # get camera pose and apply to camera node
-            camera_trans, camera_quat = self.tf_listener.lookupTransform(
-                self.base_frame, self.image_frame, rospy.Time(0)
-            )
-            camera_rot = tf.transformations.quaternion_matrix(camera_quat)[:3, :3]
-            camera_frame = np.identity(4)
-            camera_frame[:3, 3] = camera_trans
-            camera_frame[:3, :3] = camera_rot
-            coordinate_transform = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-            camera_frame = camera_frame @ coordinate_transform
-            self.camera_node.matrix = camera_frame
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            return
-
-        # get joint states for update rendered robot joints
-        filtered_joint_names = [name for name in self.joint_names if name in self.joint_states]
-        joint_angles = {joint_name: self.joint_states[joint_name] for joint_name in filtered_joint_names}
-
-        # apply forward kinematics to mesh
-        self.fk = self.robot.visual_trimesh_fk(cfg=joint_angles)
-        for mesh in self.fk:
-            pose = self.fk[mesh]
-            self.node_map[mesh].matrix = pose
-
-        # render robot on image
-        rgba, depth = self.renderer.render(self.scene, flags=pyrender.RenderFlags.RGBA)
-        rgb = cv2.cvtColor(rgba[:, :, :3].copy(), cv2.COLOR_RGB2BGR)
-        alpha = rgba[:, :, 3].copy().astype(np.float32) / 255.0
-        render_image = rgb * alpha[..., None] + self.image * (1 - alpha[..., None])
-        render_image = render_image.astype(np.uint8)
-
-        # publish
-        render_img_msg = self.cv_bridge.cv2_to_imgmsg(render_image, "bgr8")
-        render_img_msg.header.stamp = rospy.Time.now()
-        render_img_msg.header.frame_id = self.image_frame
-        self.pub_img.publish(render_img_msg)
-
-        render_mask_msg = self.cv_bridge.cv2_to_imgmsg((alpha * 255).astype(np.uint8), "mono8")
-        render_mask_msg.header.stamp = rospy.Time.now()
-        render_mask_msg.header.frame_id = self.image_frame
-        self.pub_mask.publish(render_mask_msg)
 
 
 if __name__ == "__main__":
