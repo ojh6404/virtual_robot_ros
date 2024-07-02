@@ -1,9 +1,10 @@
 <launch>
+  <arg name="robot" default="pr2"/> <!-- pr2, baxter, fetch -->
   <arg name="hand_gripper_mode" default="false"/>
   <arg name="input_image" default="/kinect_head/rgb/image_rect_color"/>
   <arg name="camera_info" default="/kinect_head/rgb/camera_info"/>
   <arg name="joint_states" default="/joint_states"/>
-  <arg name="robot_urdf" default="$(find virtual_robot_ros)/data/urdf/pr2.urdf"/>
+  <arg name="robot_urdf" default="$(find virtual_robot_ros)/data/urdf/$(arg robot).urdf"/>
   <arg name="base_frame" default="base_link"/>
   <arg name="hand_dist" default="/eus_imitation/hand_joy_node/hand_distance" />
 

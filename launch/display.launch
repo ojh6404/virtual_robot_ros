@@ -1,25 +1,36 @@
 <launch>
-  <arg name="model" default="$(env HOME)/.ros/pr2.urdf.ros"/>
+  <arg name="robot" default="pr2"/> <!-- pr2, baxter, fetch -->
+  <arg name="model" default="$(env HOME)/.ros/$(arg robot).urdf.ros"/>
   <arg name="real_frame" default="base_footprint" />
   <arg name="virtual_frame" default="virtual/base_footprint" />
+  <arg name="real_joint_states" default="/joint_states" />
+  <arg name="virtual_joint_states" default="virtual_joint_states" />
   <arg name="gui" default="true" />
   <arg name="rvizconfig" default="$(find virtual_robot_ros)/rviz/urdf.rviz" />
 
+
+  <arg name="_virtual_joint_states" value="$(arg virtual_joint_states)" if="$(arg gui)" />
+  <arg name="_virtual_joint_states" value="$(arg real_joint_states)" unless="$(arg gui)" /> <!-- mimic real robot -->
+
   <param name="virtual_robot_description" command="$(find xacro)/xacro $(arg model)" />
 
+  <node pkg="tf2_ros" type="static_transform_publisher" name="virtual_tf_publisher" args="0 0 0 0 0 0 1 $(arg real_frame) $(arg virtual_frame)" />
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="virtual_robot_state_publisher" >
     <remap from="robot_description" to="virtual_robot_description" />
-    <remap from="joint_states" to="virtual_robot_joint_states" />
+    <remap from="joint_states" to="$(arg _virtual_joint_states)" />
+    <rosparam subst_value="true" >
+      tf_prefix: virtual
+    </rosparam>
   </node>
-  <node name="virtual_robot_joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" respawn="false" output="screen" unless="$(arg gui)">
+  <node name="virtual_robot_joint_state_publisher" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" respawn="true" output="screen" if="$(arg gui)">
     <remap from="robot_description" to="/virtual_robot_description" />
-    <remap from="joint_states" to="virtual_robot_joint_states" />
+    <remap from="joint_states" to="$(arg _virtual_joint_states)" />
   </node>
-  <node name="virtual_robot_joint_state_publisher" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" respawn="false" output="screen" if="$(arg gui)">
-    <remap from="robot_description" to="/virtual_robot_description" />
-    <remap from="joint_states" to="virtual_robot_joint_states" />
-  </node>
-  <node pkg="tf2_ros" type="static_transform_publisher" name="virtual_tf_publisher" args="0 0 0 0 0 0 1 $(arg real_frame) $(arg virtual_frame)" />
+
+  <include file="$(find virtual_robot_ros)/launch/render.launch">
+    <arg name="robot" value="$(arg robot)" />
+    <arg name="joint_states" value="$(arg _virtual_joint_states)" />
+  </include>
 
   <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" />
 

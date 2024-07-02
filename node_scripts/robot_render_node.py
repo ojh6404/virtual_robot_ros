@@ -70,6 +70,7 @@ class RobotRenderNode(object):
         self.camera_node = self.scene.add(self.camera, pose=np.eye(4))
 
         # set subscriber and publisher
+        self.joint_states = {}
         self.pub_img = rospy.Publisher("~render_image", Image, queue_size=1)
         self.pub_mask = rospy.Publisher("~render_mask", Image, queue_size=1)
         self.tf_listener = tf.TransformListener()
@@ -129,7 +130,7 @@ class RobotRenderNode(object):
             self.pub_mask.publish(render_mask_msg)
 
     def joint_callback(self, msg):
-        self.joint_states = {name: angle for name, angle in zip(msg.name, msg.position)}
+        self.joint_states.update({name: angle for name, angle in zip(msg.name, msg.position)})
 
     def img_callback(self, msg):
         self.image = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
