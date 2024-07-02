@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
-from collections import OrderedDict
+import os
+import time
 import numpy as np
 import cv2
+from collections import OrderedDict
 from pyvirtualdisplay import Display
 
 import rospy
@@ -17,8 +19,7 @@ from pyrender import OffscreenRenderer
 
 from utils import create_raymond_lights, get_processed_urdf_path
 
-import time
-import os
+
 if os.environ.get("PYOPENGL_PLATFORM") is None:
     os.environ["PYOPENGL_PLATFORM"] = "egl"
 
@@ -93,7 +94,6 @@ class RobotRenderNode(object):
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
                 rospy.logwarn("Failed to get transform from {} to {}".format(self.base_frame, self.image_frame))
                 continue
-
 
             # get joint states for update rendered robot joints
             try:

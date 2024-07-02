@@ -4,9 +4,9 @@ import numpy as np
 import pyrender
 import xml.etree.ElementTree as ET
 
-import subprocess
 
-cache_dir = os.path.expanduser('~/.ros')
+cache_dir = os.path.expanduser("~/.ros")
+
 
 def create_raymond_lights():
     """
@@ -31,22 +31,20 @@ def create_raymond_lights():
         y = np.cross(z, x)
 
         matrix = np.eye(4)
-        matrix[:3,:3] = np.c_[x,y,z]
-        nodes.append(pyrender.Node(
-            light=pyrender.DirectionalLight(color=np.ones(3), intensity=1.0),
-            matrix=matrix
-        ))
+        matrix[:3, :3] = np.c_[x, y, z]
+        nodes.append(pyrender.Node(light=pyrender.DirectionalLight(color=np.ones(3), intensity=1.0), matrix=matrix))
 
     return nodes
 
+
 def package_to_absolute_path(package_path):
-    if package_path.startswith('package://'):
+    if package_path.startswith("package://"):
         # Remove 'package://'
         path = package_path[10:]
         # Split the path into package name and the relative path
-        splits = path.split('/', 1)
+        splits = path.split("/", 1)
         package_name = splits[0]
-        relative_path = splits[1] if len(splits) > 1 else ''
+        relative_path = splits[1] if len(splits) > 1 else ""
 
         # Get the absolute path of the package
         rospack = rospkg.RosPack()
@@ -58,30 +56,34 @@ def package_to_absolute_path(package_path):
     else:
         return package_path
 
+
 def convert_element_paths(element):
     for attr in element.attrib:
-        if 'filename' in attr or 'uri' in attr or 'path' in attr:
+        if "filename" in attr or "uri" in attr or "path" in attr:
             element.set(attr, package_to_absolute_path(element.get(attr)))
     for child in element:
         convert_element_paths(child)
 
+
 def remove_transmission_elements(root):
-    for transmission in root.findall('transmission'):
+    for transmission in root.findall("transmission"):
         root.remove(transmission)
+
 
 def remove_gazebo_elements(root):
-    for transmission in root.findall('gazebo'):
+    for transmission in root.findall("gazebo"):
         root.remove(transmission)
 
+
 def add_virtual_prefix_to_specific_elements(root):
-    for link in root.findall('.//link'):
-        if 'name' in link.attrib:
-            link.set('name', 'virtual_' + link.get('name'))
-    for joint in root.findall('.//joint'):
-        for tag in ['child', 'parent']:
+    for link in root.findall(".//link"):
+        if "name" in link.attrib:
+            link.set("name", "virtual_" + link.get("name"))
+    for joint in root.findall(".//joint"):
+        for tag in ["child", "parent"]:
             for elem in joint.findall(tag):
-                if 'link' in elem.attrib:
-                    elem.set('link', 'virtual_' + elem.get('link'))
+                if "link" in elem.attrib:
+                    elem.set("link", "virtual_" + elem.get("link"))
 
 
 def convert_urdf_package_to_absolute(urdf_file):
@@ -98,7 +100,7 @@ def convert_urdf_package_to_absolute(urdf_file):
     # add_virtual_prefix_to_specific_elements(root)
 
     # Write the modified URDF file for ROS
-    new_urdf_file = os.path.join(cache_dir, (os.path.basename(urdf_file) + '.ros'))
+    new_urdf_file = os.path.join(cache_dir, (os.path.basename(urdf_file) + ".ros"))
     tree.write(new_urdf_file)
     print(f"Converted URDF saved as {new_urdf_file}")
 
