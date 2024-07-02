@@ -6,4 +6,4 @@ PyOpenGL
 PyOpenGL_accelerate
 pyvirtualdisplay
 git+https://github.com/mmatl/pyrender.git
-git+https://github.com/mmatl/urdfpy.git
+git+https://github.com/ojh6404/urdfpy.git
