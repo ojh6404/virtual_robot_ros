@@ -9,7 +9,7 @@
   <arg name="real_joint_states" default="/joint_states" />
   <arg name="virtual_joint_states" default="virtual_joint_states" />
   <arg name="gui" default="true" />
-  <arg name="rvizconfig" default="$(find virtual_robot_ros)/rviz/urdf.rviz" />
+  <arg name="rvizconfig" default="$(find virtual_robot_ros)/rviz/$(arg robot).rviz" />
 
 
   <arg name="_virtual_joint_states" value="$(arg virtual_joint_states)" if="$(arg gui)" />
