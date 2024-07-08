@@ -44,8 +44,8 @@ class RobotRenderNode(object):
         self.scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3))
 
         # Set lights
-        # for light_node in create_raymond_lights():
-        #     self.scene.add_node(light_node)
+        for light_node in create_raymond_lights():
+            self.scene.add_node(light_node)
 
         # set robot
         self.robot_urdf = get_processed_urdf_path(rospy.get_param("~robot_urdf"))
