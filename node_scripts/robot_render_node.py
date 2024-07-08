@@ -42,6 +42,7 @@ class RobotRenderNode(object):
             viewport_width=self.viewport_width, viewport_height=self.viewport_height
         )
         self.scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3))
+        self.image = None
 
         # Set lights
         for light_node in create_raymond_lights():
@@ -80,53 +81,54 @@ class RobotRenderNode(object):
         self.sub_img = rospy.Subscriber("~input_image", Image, self.img_callback, queue_size=1, buff_size=2**24)
 
         while not rospy.is_shutdown():
-            try:
-                # get camera pose and apply to camera node
-                camera_trans, camera_quat = self.tf_listener.lookupTransform(
-                    self.base_frame, self.image_frame, rospy.Time(0)
-                )
-                camera_rot = tf.transformations.quaternion_matrix(camera_quat)[:3, :3]
-                camera_frame = np.identity(4)
-                camera_frame[:3, 3] = camera_trans
-                camera_frame[:3, :3] = camera_rot
-                coordinate_transform = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-                camera_frame = camera_frame @ coordinate_transform
-                self.camera_node.matrix = camera_frame
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                rospy.logwarn("Failed to get transform from {} to {}".format(self.base_frame, self.image_frame))
-                continue
+            if self.image is not None:
+                try:
+                    # get camera pose and apply to camera node
+                    camera_trans, camera_quat = self.tf_listener.lookupTransform(
+                        self.base_frame, self.image_frame, rospy.Time(0)
+                    )
+                    camera_rot = tf.transformations.quaternion_matrix(camera_quat)[:3, :3]
+                    camera_frame = np.identity(4)
+                    camera_frame[:3, 3] = camera_trans
+                    camera_frame[:3, :3] = camera_rot
+                    coordinate_transform = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+                    camera_frame = camera_frame @ coordinate_transform
+                    self.camera_node.matrix = camera_frame
+                except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                    rospy.logwarn("Failed to get transform from {} to {}".format(self.base_frame, self.image_frame))
+                    continue
 
-            # get joint states for update rendered robot joints
-            try:
-                filtered_joint_names = [name for name in self.joint_names if name in self.joint_states]
-                joint_angles = {joint_name: self.joint_states[joint_name] for joint_name in filtered_joint_names}
-            except AttributeError:
-                rospy.logwarn("Failed to get joint states")
-                continue
+                # get joint states for update rendered robot joints
+                try:
+                    filtered_joint_names = [name for name in self.joint_names if name in self.joint_states]
+                    joint_angles = {joint_name: self.joint_states[joint_name] for joint_name in filtered_joint_names}
+                except AttributeError:
+                    rospy.logwarn("Failed to get joint states")
+                    continue
 
-            # apply forward kinematics to mesh
-            self.fk = self.robot.visual_trimesh_fk(cfg=joint_angles)
-            for mesh in self.fk:
-                pose = self.fk[mesh]
-                self.node_map[mesh].matrix = pose
+                # apply forward kinematics to mesh
+                self.fk = self.robot.visual_trimesh_fk(cfg=joint_angles)
+                for mesh in self.fk:
+                    pose = self.fk[mesh]
+                    self.node_map[mesh].matrix = pose
 
-            # render robot on image
-            rgba, depth = self.renderer.render(self.scene, flags=pyrender.RenderFlags.RGBA)
-            rgb = cv2.cvtColor(rgba[:, :, :3].copy(), cv2.COLOR_RGB2BGR)
-            alpha = rgba[:, :, 3].copy().astype(np.float32) / 255.0
-            render_image = rgb * alpha[..., None] + self.image * (1 - alpha[..., None])
-            render_image = render_image.astype(np.uint8)
+                # render robot on image
+                rgba, depth = self.renderer.render(self.scene, flags=pyrender.RenderFlags.RGBA)
+                rgb = cv2.cvtColor(rgba[:, :, :3].copy(), cv2.COLOR_RGB2BGR)
+                alpha = rgba[:, :, 3].copy().astype(np.float32) / 255.0
+                render_image = rgb * alpha[..., None] + self.image * (1 - alpha[..., None])
+                render_image = render_image.astype(np.uint8)
 
-            # publish
-            render_img_msg = self.cv_bridge.cv2_to_imgmsg(render_image, "bgr8")
-            render_img_msg.header.stamp = rospy.Time.now()
-            render_img_msg.header.frame_id = self.image_frame
-            self.pub_img.publish(render_img_msg)
+                # publish
+                render_img_msg = self.cv_bridge.cv2_to_imgmsg(render_image, "bgr8")
+                render_img_msg.header.stamp = rospy.Time.now()
+                render_img_msg.header.frame_id = self.image_frame
+                self.pub_img.publish(render_img_msg)
 
-            render_mask_msg = self.cv_bridge.cv2_to_imgmsg((alpha * 255).astype(np.uint8), "mono8")
-            render_mask_msg.header.stamp = rospy.Time.now()
-            render_mask_msg.header.frame_id = self.image_frame
-            self.pub_mask.publish(render_mask_msg)
+                render_mask_msg = self.cv_bridge.cv2_to_imgmsg((alpha * 255).astype(np.uint8), "mono8")
+                render_mask_msg.header.stamp = rospy.Time.now()
+                render_mask_msg.header.frame_id = self.image_frame
+                self.pub_mask.publish(render_mask_msg)
 
     def joint_callback(self, msg):
         self.joint_states.update({name: angle for name, angle in zip(msg.name, msg.position)})
