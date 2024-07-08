@@ -1,0 +1,54 @@
+<launch>
+  <arg name="input_image" default="/camera/rgb/image_rect_color"/>
+  <arg name="camera_info" default="/camera/rgb/camera_info"/>
+
+  <arg name="robot" default="pr2"/> <!-- pr2, baxter, fetch -->
+  <arg name="model" default="$(find virtual_robot_ros)/data/urdf/$(arg robot).urdf"/>
+  <arg name="base_frame" default="base_footprint" />
+  <arg name="human_base_frame" default="person/RHeel" />
+  <arg name="virtual_frame" default="virtual/base_footprint" />
+  <arg name="real_joint_states" default="/joint_states" />
+  <arg name="virtual_joint_states" default="virtual_joint_states" />
+  <arg name="gui" default="true" />
+  <arg name="rvizconfig" default="$(find virtual_robot_ros)/rviz/mocap_virtual.rviz" />
+
+  <!-- TODO: replace this with IK -->
+  <arg name="_virtual_joint_states" value="$(arg virtual_joint_states)" if="$(arg gui)" />
+  <arg name="_virtual_joint_states" value="$(arg real_joint_states)" unless="$(arg gui)" /> <!-- mimic real robot -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="virtual_tf_publisher" args="0 0 0 0 0 0 1 $(arg human_base_frame) $(arg virtual_frame)" />
+
+  <!-- robot description -->
+  <param name="virtual_robot_description" command="$(find xacro)/xacro $(arg model)" />
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="virtual_robot_state_publisher" >
+    <remap from="robot_description" to="virtual_robot_description" />
+    <remap from="joint_states" to="$(arg _virtual_joint_states)" />
+    <rosparam subst_value="true" >
+      tf_prefix: virtual
+    </rosparam>
+  </node>
+
+  <!-- TODO: replace this with IK -->
+  <node name="virtual_robot_joint_state_publisher" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" respawn="true" output="screen" if="$(arg gui)">
+    <remap from="robot_description" to="/virtual_robot_description" />
+    <remap from="joint_states" to="$(arg _virtual_joint_states)" />
+  </node>
+
+  <!-- rendering virtual robot -->
+  <include file="$(find virtual_robot_ros)/launch/render.launch">
+    <arg name="input_image" value="$(arg input_image)" />
+    <arg name="camera_info" value="$(arg camera_info)" />
+    <arg name="robot" value="$(arg robot)" />
+    <arg name="base_frame" value="virtual/base_footprint" />
+    <arg name="joint_states" value="$(arg _virtual_joint_states)" />
+  </include>
+
+  <!-- body mocap -->
+  <include file="$(find mocap_ros)/launch/body_mocap.launch">
+    <arg name="input_image" value="$(arg input_image)" />
+    <arg name="camera_info" value="$(arg camera_info)" />
+    <arg name="visualize" value="false" />
+  </include>
+
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" />
+
+</launch>
