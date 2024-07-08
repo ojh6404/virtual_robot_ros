@@ -1,0 +1,36 @@
+<launch>
+  <arg name="input_image" default="/kinect_head/rgb/image_rect_color"/>
+  <arg name="camera_info" default="/kinect_head/rgb/camera_info"/>
+
+  <arg name="robot" default="pr2"/> <!-- pr2, baxter, fetch -->
+  <arg name="real_frame" default="base_footprint" />
+  <arg name="virtual_frame" default="virtual/base_footprint" />
+  <arg name="real_joint_states" default="/joint_states" />
+  <arg name="virtual_joint_states" default="virtual_joint_states" />
+  <arg name="gui" default="false" />
+  <arg name="model" default="$(find virtual_robot_ros)/data/urdf/$(arg robot).urdf"/>
+
+  <param name="use_sim_time" value="true" />
+  <node pkg="rosbag" type="play" name="rosbag_play"
+        args="$(find virtual_robot_ros)/test/test.bag --loop --clock" output="screen" />
+  <node pkg="image_transport" type="republish" name="decompressor"
+        args="compressed in:=$(arg input_image) raw out:=$(arg input_image)" output="screen" />
+  <param name="robot_description" command="$(find xacro)/xacro $(arg model)" />
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" >
+    <remap from="joint_states" to="$(arg real_joint_states)" />
+  </node>
+
+  <!-- whole robot body render and display -->
+  <include file="$(find virtual_robot_ros)/launch/display.launch">
+    <arg name="input_image" value="$(arg input_image)"/>
+    <arg name="camera_info" value="$(arg camera_info)"/>
+
+    <arg name="robot" value="$(arg robot)"/>
+    <arg name="real_joint_states" value="$(arg real_joint_states)"/>
+    <arg name="virtual_joint_states" value="$(arg virtual_joint_states)"/>
+    <arg name="real_frame" value="$(arg real_frame)" />
+    <arg name="virtual_frame" value="$(arg virtual_frame)" />
+    <arg name="gui" value="$(arg gui)" />
+  </include>
+
+</launch>
