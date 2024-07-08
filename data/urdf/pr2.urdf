@@ -1354,50 +1354,6 @@
   <gazebo reference="sensor_mount_sensor_link">
     <material value="PR2/Blue"/>
   </gazebo>
-  <joint name="projector_wg6802418_frame_joint" type="fixed">
-    <origin rpy="0 0 0" xyz="0 0.110 0.0546"/>
-    <parent link="head_plate_frame"/>
-    <child link="projector_wg6802418_frame"/>
-  </joint>
-  <link name="projector_wg6802418_frame">
-    <inertial>
-      <mass value="0.01"/>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
-  </link>
-  <joint name="projector_wg6802418_child_frame_joint" type="fixed">
-    <origin rpy="0 -1.5707963267948966 0" xyz="0 0 0"/>
-    <parent link="projector_wg6802418_frame"/>
-    <child link="projector_wg6802418_child_frame"/>
-  </joint>
-  <link name="projector_wg6802418_child_frame">
-    <inertial>
-      <mass value="0.01"/>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
-  </link>
-  <gazebo reference="projector_wg6802418_child_frame">
-    <projector name="projector_wg6802418_projector_wg6802418">
-      <pose>0 0 0 0 -1.5707 0</pose>
-      <texture>stereo_projection_pattern_high_res_red.png</texture>
-      <fov>0.9599310885968813</fov>
-      <near_clip>0.1</near_clip>
-      <far_clip>10</far_clip>
-    </projector>
-  </gazebo>
-  <gazebo>
-    <plugin filename="libgazebo_ros_projector.so" name="projector_wg6802418_controller">
-      <projector>projector_wg6802418_child_frame/projector_wg6802418_projector_wg6802418</projector>
-      <alwaysOn>true</alwaysOn>
-      <updateRate>15.0</updateRate>
-      <textureName>stereo_projection_pattern_high_res_red.png</textureName>
-      <filterTextureName>stereo_projection_pattern_filter.png</filterTextureName>
-      <textureTopicName>projector_wg6802418_controller/image</textureTopicName>
-      <projectorTopicName>projector_wg6802418_controller/projector</projectorTopicName>
-    </plugin>
-  </gazebo>
   <joint name="laser_tilt_mount_joint" type="revolute">
     <axis xyz="0 1 0"/>
     <limit effort="0.65" lower="-0.7854" upper="1.48353" velocity="10.0"/>
@@ -3462,5 +3418,144 @@
     <turnGravityOff>true</turnGravityOff>
     <material>PR2/Blue</material>
   </gazebo>
+
+  <!-- JSK pr1040 -->
+  <joint name="head_mount_joint" type="fixed">
+    <origin xyz="-0.138 0.0 0.091" rpy="0.0 0.0 0.0"/>
+    <parent link="head_plate_frame"/>
+    <child link="head_mount_link"/>
+  </joint>
+  <link name="head_mount_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <geometry>
+        <mesh filename="package://pr2_description/meshes/sensors/kinect_prosilica_v0/115x100_swept_back--coarse.STL" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+      <collision>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+    </link>
+  <joint name="head_mount_kinect_ir_joint" type="fixed">
+    <origin xyz="-0.032267 0.0125 0.136453" rpy="0.0 0.0 0.0"/>
+    <parent link="head_mount_link"/>
+    <child link="head_mount_kinect_ir_link"/>
+  </joint>
+  <link name="head_mount_kinect_ir_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
+    </inertial>
+      <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <geometry>
+          <sphere radius="0.0005"/>
+      </geometry>
+    </visual>
+    <collision>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <geometry>
+       <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="head_mount_kinect_ir_optical_frame_joint" type="fixed">
+    <origin xyz="0.0 0.01 0.0" rpy="-1.57079632679 0.0 -1.57079632679"/>
+    <parent link="head_mount_kinect_ir_link"/>
+    <child link="head_mount_kinect_ir_optical_frame"/>
+  </joint>
+  <link name="head_mount_kinect_ir_optical_frame"/>
+    <joint name="head_mount_kinect_rgb_joint" type="fixed">
+    <origin xyz="
+  -0.00696920244115 -0.0325191168453 -0.0116889085003" rpy="0.0180369961393 -0.029141984173 0.0309389769244"/>
+    <parent link="head_mount_kinect_ir_link"/>
+    <child link="head_mount_kinect_rgb_link"/>
+  </joint>
+  <link name="head_mount_kinect_rgb_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="head_mount_kinect_rgb_optical_frame_joint" type="fixed">
+    <origin xyz="0.0 0.0 0.0" rpy="-1.57079632679 0.0 -1.57079632679"/>
+    <parent link="head_mount_kinect_rgb_link"/>
+    <child link="head_mount_kinect_rgb_optical_frame"/>
+  </joint>
+  <link name="head_mount_kinect_rgb_optical_frame"/>
+    <joint name="head_mount_prosilica_joint" type="fixed">
+    <origin xyz="-0.046457 0.0125 0.088921" rpy="0.0 0.0 0.0"/>
+    <parent link="head_mount_link"/>
+    <child link="head_mount_prosilica_link"/>
+  </joint>
+  <link name="head_mount_prosilica_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01"/>
+    </inertial>
+      <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <geometry>
+          <sphere radius="0.0005"/>
+      </geometry>
+    </visual>
+    <collision>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <geometry>
+       <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+  </link>
+    <joint name="head_mount_prosilica_optical_frame_joint" type="fixed">
+    <origin xyz="0.0 0.0 0.0" rpy="-1.57079632679 0.0 -1.57079632679"/>
+   <parent link="head_mount_prosilica_link"/>
+    <child link="head_mount_prosilica_optical_frame"/>
+  </joint>
+  <link name="head_mount_prosilica_optical_frame"/>
+    <link name="left_arm_chain_cb_link"/>
+  <joint name="left_arm_chain_cb" type="fixed">
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <parent link="l_wrist_roll_link"/>
+    <child link="left_arm_chain_cb_link"/>
+   </joint>
+  <link name="right_arm_chain_cb_link"/>
+  <joint name="right_arm_chain_cb"
+   type="fixed">
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <parent link="r_wrist_roll_link"/>
+    <child link="right_arm_chain_cb_link"/>
+    </joint>
+  <link name="head_chain_cb_link"/>
+  <joint name="head_chain_cb" type="fixed">
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <parent link="head_tilt_link"/>
+    <child link="head_chain_cb_link"/>
+  </joint>
 </robot>
 
