@@ -2,42 +2,41 @@
 # -*- coding: utf-8 -*-
 
 """
-This script is used to process rosbag files and save the processed results without roscore.
+This script is for rendering virtual robot on rosbag images.
 """
-
-import message_filters
-
-from scipy import signal
-from std_msgs.msg import String
-from sensor_msgs.msg import CameraInfo, Image, CompressedImage, JointState
-from geometry_msgs.msg import PoseStamped
-import rospy
-import rosbag
-import argparse
-from tqdm import tqdm
-from cv_bridge import CvBridge
-import numpy as np
-import cv2
-import pyrender
-from pyrender import OffscreenRenderer
-from pyvirtualdisplay import Display
-import urdfpy
-
-from collections import OrderedDict
-import tf
-import tf2_ros
-
-from utils import create_raymond_lights, get_processed_urdf_path
-
-
-from eus_imitation_msgs.msg import FloatVector
-from eus_imitation_msgs.srv import RobotIK, RobotIKRequest, RobotIKResponse
-from copy import deepcopy
 
 import os
 
 if os.environ.get("PYOPENGL_PLATFORM") is None:
     os.environ["PYOPENGL_PLATFORM"] = "egl"
+
+import argparse
+from copy import deepcopy
+from collections import OrderedDict
+import numpy as np
+import cv2
+from tqdm import tqdm
+from pyvirtualdisplay import Display
+import urdfpy
+from scipy import signal
+import pyrender
+from pyrender import OffscreenRenderer
+
+import rospy
+import rosbag
+import rospkg
+import message_filters
+from cv_bridge import CvBridge
+import tf
+import tf2_ros
+
+from std_msgs.msg import String
+from sensor_msgs.msg import CameraInfo, CompressedImage, JointState
+from geometry_msgs.msg import PoseStamped
+from eus_imitation_msgs.msg import FloatVector
+from eus_imitation_msgs.srv import RobotIK, RobotIKRequest
+
+from virtual_robot_ros.utils import create_raymond_lights, get_processed_urdf_path
 
 
 bridge = CvBridge()
@@ -81,7 +80,7 @@ def main(args):
             scene.add_node(light_node)
 
         # set robot
-        robot_urdf = get_processed_urdf_path("/home/leus/pr2.urdf")
+        robot_urdf = get_processed_urdf_path(rospkg.RosPack().get_path("virtual_robot_ros") + "/data/urdf/pr2.urdf")
         robot = urdfpy.URDF.load(robot_urdf)
         fk = robot.visual_trimesh_fk()  # dict, key: trimesh, value: 4x4 matrix
         node_map = OrderedDict()
@@ -115,18 +114,18 @@ def main(args):
         camera_node = scene.add(camera, pose=np.eye(4))
 
         # ==================================================================== #
-        # topics = [
-        #     "/inpaint/compressed",
-        #     "/joint_states",
-        #     "/left_hand_gripper_frame",
-        #     "/right_hand_gripper_frame",
-        # ]
         topics = [
-            "/kinect_head/rgb/image_rect_color/compressed",
+            "/detection/inpaint/compressed",
             "/joint_states",
-            "/left_hand/grasp_pose",
-            "/right_hand/grasp_pose",
+            "/mocap/left_hand/grasp_pose",
+            "/mocap/right_hand/grasp_pose",
         ]
+        # topics = [
+        #     "/kinect_head/rgb/image_rect_color/compressed",
+        #     "/joint_states",
+        #     "/left_hand/grasp_pose",
+        #     "/right_hand/grasp_pose",
+        # ]
         msgs = [CompressedImage, CameraInfo, JointState, PoseStamped, PoseStamped]
         subscribers = {topic: message_filters.Subscriber(topic, msg) for topic, msg in zip(topics, msgs)}
         ts = message_filters.ApproximateTimeSynchronizer(
@@ -164,6 +163,7 @@ def main(args):
             target_joint_states.header.stamp = joint_state_msg.header.stamp
 
             # update current joint states with target joint states. target joint states include partial joint states
+            current_joint_states.header.stamp = joint_state_msg.header.stamp
             for i, name in enumerate(target_joint_states.name):
                 idx = current_joint_states.name.index(name)
                 current_joint_states.position[idx] = target_joint_states.position[i]
@@ -203,9 +203,6 @@ def main(args):
             hand_dist = 0.07
             for joint in gripper_joints:
                 joint_states[joint.name] = hand_dist * scale[joint] + min_joints[joint]
-            # joint_states["r_gripper_motor_slider_joint"] = hand_dist * scale[0] + min_joints[0]
-            # joint_states["r_gripper_l_finger_joint"] = hand_dist * scale[1] + min_joints[1]
-            # joint_states["r_gripper_joint"] = hand_dist * scale[2] + min_joints[2]
 
             filtered_joint_names = [name for name in joint_names if name in joint_states]
             joint_angles = {joint_name: joint_states[joint_name] for joint_name in filtered_joint_names}
@@ -223,50 +220,63 @@ def main(args):
             render_image = rgb * alpha[..., None] + image * (1 - alpha[..., None])
             render_image = render_image.astype(np.uint8)
 
-            render_msg = bridge.cv2_to_imgmsg(render_image, "bgr8")
+            render_msg = bridge.cv2_to_compressed_imgmsg(render_image, dst_format="jpeg")
             render_msg.header = img_msg.header
             render_msg.header.frame_id = img_msg.header.frame_id
 
-            # robot state is left hand xyz, roll pitch yaw, right hand xyz, roll pitch yaw
+            # create robot state message for eus_imitation
+            # robot state is left hand x,y,z,r,p,y + right hand x,y,z,r,p,y
+            # TODO : add gripper state
             robot_state_msg = FloatVector()
-            robot_state_msg.header.stamp = joint_state_msg.header.stamp
-            left_hand_pos = [
-                left_hand_pose_msg.pose.position.x,
-                left_hand_pose_msg.pose.position.y,
-                left_hand_pose_msg.pose.position.z,
-            ]
-            left_hand_quat = [
-                left_hand_pose_msg.pose.orientation.x,
-                left_hand_pose_msg.pose.orientation.y,
-                left_hand_pose_msg.pose.orientation.z,
-                left_hand_pose_msg.pose.orientation.w,
-            ]
-            left_hand_rpy = tf.transformations.euler_from_quaternion(left_hand_quat)
-            right_hand_pos = [
-                right_hand_pose_msg.pose.position.x,
-                right_hand_pose_msg.pose.position.y,
-                right_hand_pose_msg.pose.position.z,
-            ]
-            right_hand_quat = [
-                right_hand_pose_msg.pose.orientation.x,
-                right_hand_pose_msg.pose.orientation.y,
-                right_hand_pose_msg.pose.orientation.z,
-                right_hand_pose_msg.pose.orientation.w,
-            ]
-            right_hand_rpy = tf.transformations.euler_from_quaternion(right_hand_quat)
-            robot_state_msg.data = left_hand_pos + left_hand_rpy + right_hand_pos + right_hand_rpy
+            robot_state_msg.header = joint_state_msg.header
+            left_hand_pos = np.array(
+                [
+                    left_hand_pose_msg.pose.position.x,
+                    left_hand_pose_msg.pose.position.y,
+                    left_hand_pose_msg.pose.position.z,
+                ]
+            ) * 1000  # m to mm
+            left_hand_rot = np.array(
+                tf.transformations.euler_from_quaternion(
+                    [
+                        left_hand_pose_msg.pose.orientation.x,
+                        left_hand_pose_msg.pose.orientation.y,
+                        left_hand_pose_msg.pose.orientation.z,
+                        left_hand_pose_msg.pose.orientation.w,
+                    ]
+                )
+            )
+            right_hand_pos = np.array(
+                [
+                    right_hand_pose_msg.pose.position.x,
+                    right_hand_pose_msg.pose.position.y,
+                    right_hand_pose_msg.pose.position.z,
+                ]
+            ) * 1000 # m to mm
+            right_hand_rot = np.array(
+                tf.transformations.euler_from_quaternion(
+                    [
+                        right_hand_pose_msg.pose.orientation.x,
+                        right_hand_pose_msg.pose.orientation.y,
+                        right_hand_pose_msg.pose.orientation.z,
+                        right_hand_pose_msg.pose.orientation.w,
+                    ]
+                )
+            )
+            robot_state_msg.data = np.concatenate([left_hand_pos, left_hand_rot, right_hand_pos, right_hand_rot])
 
-            outbag.write("/rendered_image", render_msg, img_msg.header.stamp)
-            outbag.write("/target_joint_states", current_joint_states, joint_state_msg.header.stamp)
+            # write to rosbag
+            outbag.write("/virtual/rendered_image/compressed", render_msg, img_msg.header.stamp)
+            outbag.write("/virtual/joint_states", current_joint_states, joint_state_msg.header.stamp)
             outbag.write("/eus_imitation/robot_state", robot_state_msg, joint_state_msg.header.stamp)
 
         ts.registerCallback(callback)
 
-        print("Processing rosbags...")
+        print("Rendering virtual robot on rosbags...")
         bag_reader = rosbag.Bag(args.rosbag, skip_index=True)
 
         # message filter
-        for message_idx, (topic, msg, t) in tqdm(enumerate(bag_reader.read_messages(topics=topics))):
+        for _, (topic, msg, t) in tqdm(enumerate(bag_reader.read_messages(topics=topics))):
             subscriber = subscribers[topic]
             if subscriber:
                 subscriber.signalMessage(msg)
@@ -284,15 +294,16 @@ def main(args):
             end_time = input_bag.get_end_time()
 
             for t in np.arange(start_time, end_time, 1.0 / args.fps):
-                timer_msg = String()
-                timer_msg.data = "timer"
-                outbag.write("/timer", timer_msg, rospy.Time(t))
+                timer_msg = FloatVector()
+                timer_msg.header.stamp = rospy.Time(t)
+                timer_msg.data = [0] * 12 # TODO
+                outbag.write("/eus_imitation/robot_action", timer_msg, rospy.Time(t))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process rosbag file to render robot on image")
+    parser = argparse.ArgumentParser(description="Process rosbag to render virtual robot.")
     parser.add_argument("-bag", "--rosbag", type=str, default=None, help="rosbag file to process")
-    parser.add_argument("-o", "--output", type=str, default="virtual.bag", help="output rosbag file or mp4 file")
+    parser.add_argument("-o", "--output", type=str, default="virtual.bag", help="output rosbag")
     parser.add_argument(
         "-sf", "--source_frame", type=str, default="head_mount_kinect_rgb_optical_frame", help="source frame"
     )
