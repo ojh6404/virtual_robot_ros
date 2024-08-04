@@ -7,16 +7,16 @@ from collections import OrderedDict
 from pyvirtualdisplay import Display
 
 import rospy
-import tf
 from sensor_msgs.msg import Image, CameraInfo, JointState
 from image_geometry import PinholeCameraModel
 from cv_bridge import CvBridge
 
 import urdfpy
 import pyrender
-
+import skrobot
 
 from virtual_robot_ros.utils import create_raymond_lights, get_processed_urdf_path
+
 
 
 if os.environ.get("PYOPENGL_PLATFORM") is None:
@@ -31,7 +31,9 @@ class RobotRenderNode(object):
         self.cv_bridge = CvBridge()
 
         self.fps = rospy.get_param("~fps", 30)
-        self.base_frame = rospy.get_param("~base_frame", "base_link")
+        self.base_frame = rospy.get_param("~base_frame", "base_footprint")
+        self.camera_frame = rospy.get_param("~camera_frame", "head_mount_kinect_rgb_optical_frame")
+
         try:
             img_msg = rospy.wait_for_message("~input_image", Image, timeout=10)
             self.image_frame = img_msg.header.frame_id
@@ -72,31 +74,30 @@ class RobotRenderNode(object):
         )
         self.camera_node = self.scene.add(self.camera, pose=np.eye(4))
 
+        # set skrobot model
+        self.skrobot_model = skrobot.models.urdf.RobotModelFromURDF(urdf_file=self.robot_urdf)
+        self.skrobot_joint_names = [joint.name for joint in self.skrobot_model.joint_list]
+        self.skrobot_link_names = [link.name for link in self.skrobot_model.link_list]
+
         # set subscriber and publisher
         self.joint_states = {}
         self.pub_img = rospy.Publisher("~render_image", Image, queue_size=1)
         self.pub_mask = rospy.Publisher("~render_mask", Image, queue_size=1)
-        self.tf_listener = tf.TransformListener()
         self.sub_joint = rospy.Subscriber("~joint_states", JointState, self.joint_callback)
         self.sub_img = rospy.Subscriber("~input_image", Image, self.img_callback, queue_size=1, buff_size=2**24)
 
         while not rospy.is_shutdown():
             if self.image is not None:
-                try:
-                    # get camera pose and apply to camera node
-                    camera_trans, camera_quat = self.tf_listener.lookupTransform(
-                        self.base_frame, self.image_frame, rospy.Time(0)
-                    )
-                    camera_rot = tf.transformations.quaternion_matrix(camera_quat)[:3, :3]
-                    camera_frame = np.identity(4)
-                    camera_frame[:3, 3] = camera_trans
-                    camera_frame[:3, :3] = camera_rot
-                    coordinate_transform = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-                    camera_frame = camera_frame @ coordinate_transform
-                    self.camera_node.matrix = camera_frame
-                except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                    rospy.logwarn("Failed to get transform from {} to {}".format(self.base_frame, self.image_frame))
-                    continue
+                # update skrobot model with real joint states
+                for _ in self.joint_states:
+                    angle_vector = np.array([self.joint_states[name] for name in self.skrobot_joint_names])
+                    self.skrobot_model.angle_vector(angle_vector)
+
+                # TODO add transform from base to camera
+                camera_frame = self.skrobot_model.link_list[self.skrobot_link_names.index(self.camera_frame)].worldcoords().T()
+                coordinate_transform = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+                camera_frame = camera_frame @ coordinate_transform
+                self.camera_node.matrix = camera_frame
 
                 # get joint states for update rendered robot joints
                 try:
