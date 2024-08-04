@@ -18,7 +18,6 @@ import skrobot
 from virtual_robot_ros.utils import create_raymond_lights, get_processed_urdf_path
 
 
-
 if os.environ.get("PYOPENGL_PLATFORM") is None:
     os.environ["PYOPENGL_PLATFORM"] = "egl"
 
@@ -94,7 +93,9 @@ class RobotRenderNode(object):
                     self.skrobot_model.angle_vector(angle_vector)
 
                 # TODO add transform from base to camera
-                camera_frame = self.skrobot_model.link_list[self.skrobot_link_names.index(self.camera_frame)].worldcoords().T()
+                camera_frame = (
+                    self.skrobot_model.link_list[self.skrobot_link_names.index(self.camera_frame)].worldcoords().T()
+                )
                 coordinate_transform = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
                 camera_frame = camera_frame @ coordinate_transform
                 self.camera_node.matrix = camera_frame
